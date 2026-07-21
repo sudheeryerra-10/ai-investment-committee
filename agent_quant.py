@@ -5,41 +5,40 @@ from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 
-from ingestor import get_stock_data
 from schemas import QuantReport
 
 load_dotenv()
 
-# Safe API key lookup for both local environment and Streamlit Cloud Secrets
-api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("AQ.Ab8RN6LucwU076eFsdgbY65KniyOBG9Y9qQJx8phFdCoO5wbmg")
+# Safe API key lookup for local & Streamlit Cloud
+api_key = os.getenv("AQ.Ab8RN6LucwU076eFsdgbY65KniyOBG9Y9qQJx8phFdCoO5wbmg") or st.secrets.get("AQ.Ab8RN6LucwU076eFsdgbY65KniyOBG9Y9qQJx8phFdCoO5wbmg")
 client = genai.Client(api_key=api_key)
 
 QUANT_SYSTEM_PROMPT = """
 You are Agent A: Institutional Lead Quantitative Fundamental Analyst.
-Analyze the provided target ticker and fundamental quantitative metrics (Rule of 40, Free Cash Flow Yield, P/E, P/S).
-Evaluate corporate operational performance and market valuation discipline.
+Your task is to analyze the given US stock ticker using real-time financial search.
+
+You must search for and evaluate:
+1. Trailing 12-Month (TTM) Revenue Growth (%) & Profit Margin (%)
+2. Rule of 40 Score (Revenue Growth % + Profit Margin %)
+3. Free Cash Flow (FCF) Yield (%)
+4. Trailing P/E and P/S Ratios
+
 Produce a structured QuantReport adhering strictly to the required output schema.
 """
 
 def run_quant_agent(ticker_symbol: str) -> QuantReport:
     """
-    Executes Agent A (Quant Analyst): Evaluates financial data and outputs structured QuantReport.
+    Executes Agent A (Quant Analyst): Grounded with Google Search to evaluate stock fundamentals.
     """
-    print(f"\n[Agent A: Quant Analyst (Gemini)] Analyzing {ticker_symbol.upper()}...")
-    
-    # Fetch live data strictly
-    raw_data = get_stock_data(ticker_symbol)
+    print(f"\n[Agent A: Quant Analyst (Gemini Grounded)] Analyzing {ticker_symbol.upper()}...")
 
     user_prompt = f"""
     Target Ticker: {ticker_symbol.upper()}
     
-    Fundamental Quantitative Data:
-    - Rule of 40 Score: {raw_data['rule_of_40']}%
-    - Free Cash Flow Yield: {raw_data['fcf_yield_pct']}%
-    - Trailing P/E Ratio: {raw_data['pe_ratio']}
-    - Trailing P/S Ratio: {raw_data['ps_ratio']}
-    
-    Evaluate these fundamental metrics and produce a structured QuantReport.
+    Search for live financial data for {ticker_symbol.upper()}:
+    - Find current Revenue Growth (TTM), Net Profit Margin, Free Cash Flow, Market Cap, P/E ratio, and P/S ratio.
+    - Calculate the Rule of 40 score and FCF yield.
+    - Analyze operational quality and valuation discipline.
     """
     
     response = client.models.generate_content(
@@ -47,6 +46,7 @@ def run_quant_agent(ticker_symbol: str) -> QuantReport:
         contents=user_prompt,
         config=types.GenerateContentConfig(
             system_instruction=QUANT_SYSTEM_PROMPT,
+            tools=[{"google_search": {}}],  # Enables live search grounding
             response_mime_type="application/json",
             response_schema=QuantReport,
             temperature=0.2,
