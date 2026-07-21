@@ -5,43 +5,46 @@ from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 
+from ingestor import get_stock_data
 from schemas import QuantReport
-from ingestor import fetch_financial_metrics
 
 load_dotenv()
 
-# Access API key from env vars locally or Streamlit secrets on cloud
-api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+# Safe API key lookup for both local environment and Streamlit Cloud Secrets
+api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("AQ.Ab8RN6LucwU076eFsdgbY65KniyOBG9Y9qQJx8phFdCoO5wbmg")
 client = genai.Client(api_key=api_key)
 
 QUANT_SYSTEM_PROMPT = """
-You are an institutional growth equity analyst focusing strictly on maximum-return US equities. 
-Your role is to look past corporate narrative and isolate the raw financial math.
-
-You must evaluate the target stock using three quantitative pillars:
-1. The Rule of 40 (YoY Revenue Growth % + Free Cash Flow Margin %): Scores > 40% indicate hyper-efficient growth.
-2. Free Cash Flow Yield vs Sector Expectations.
-3. Valuation Multiples (P/E and P/S relative to growth rates).
-
-Output a structured QuantReport:
-- Calculate an overall fundamental_score (0.0 to 100.0) reflecting business efficiency and valuation balance.
-- Provide a razor-sharp quant_summary highlighting financial strengths and valuation risks.
-- Restrict your focus purely to corporate fundamentals. Do not evaluate external macro news.
+You are Agent A: Institutional Lead Quantitative Fundamental Analyst.
+Analyze the provided target ticker and fundamental quantitative metrics (Rule of 40, Free Cash Flow Yield, P/E, P/S).
+Evaluate corporate operational performance and market valuation discipline.
+Produce a structured QuantReport adhering strictly to the required output schema.
 """
 
 def run_quant_agent(ticker_symbol: str) -> QuantReport:
     """
-    Executes Agent A: Ingests financial data and returns a structured QuantReport Pydantic object using Gemini.
+    Executes Agent A (Quant Analyst): Evaluates financial data and outputs structured QuantReport.
     """
     print(f"\n[Agent A: Quant Analyst (Gemini)] Analyzing {ticker_symbol.upper()}...")
     
-    # 1. Fetch raw financial metrics
-    metrics = fetch_financial_metrics(ticker_symbol)
+    # Fetch live data strictly
+    raw_data = get_stock_data(ticker_symbol)
+
+    user_prompt = f"""
+    Target Ticker: {ticker_symbol.upper()}
     
-    # 2. Call Gemini enforcing the QuantReport Pydantic schema
+    Fundamental Quantitative Data:
+    - Rule of 40 Score: {raw_data['rule_of_40']}%
+    - Free Cash Flow Yield: {raw_data['fcf_yield_pct']}%
+    - Trailing P/E Ratio: {raw_data['pe_ratio']}
+    - Trailing P/S Ratio: {raw_data['ps_ratio']}
+    
+    Evaluate these fundamental metrics and produce a structured QuantReport.
+    """
+    
     response = client.models.generate_content(
         model='gemini-2.5-flash',
-        contents=f"Analyze the following financial metrics for {ticker_symbol.upper()}:\n{json.dumps(metrics, indent=2)}",
+        contents=user_prompt,
         config=types.GenerateContentConfig(
             system_instruction=QUANT_SYSTEM_PROMPT,
             response_mime_type="application/json",
@@ -50,12 +53,5 @@ def run_quant_agent(ticker_symbol: str) -> QuantReport:
         ),
     )
     
-    # 3. Parse and return Pydantic object
     report_dict = json.loads(response.text)
     return QuantReport(**report_dict)
-
-if __name__ == "__main__":
-    # Test Agent A with Palantir
-    result = run_quant_agent("PLTR")
-    print("\n--- AGENT A OUTPUT (GEMINI) ---")
-    print(json.dumps(result.model_dump(), indent=2))
