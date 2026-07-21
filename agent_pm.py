@@ -1,5 +1,6 @@
 import os
 import json
+import streamlit as st
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
@@ -8,11 +9,10 @@ from schemas import QuantReport, RiskReport, InvestmentMemo
 from agent_quant import run_quant_agent
 from agent_risk import run_risk_agent
 
-# Load environment variables
 load_dotenv()
 
-# Initialize Gemini Client
-client = genai.Client(api_key=os.getenv("AQ.Ab8RN6IXgBuWZhoW4nJcy2YQMThiWFdIl6HnsorCB-xUwq4YlA"))
+api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+client = genai.Client(api_key=api_key)
 
 PM_SYSTEM_PROMPT = """
 You are the Chief Investment Officer (CIO) and Portfolio Manager of an institutional technology growth fund.

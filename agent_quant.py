@@ -1,5 +1,6 @@
 import os
 import json
+import streamlit as st
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
@@ -7,11 +8,11 @@ from dotenv import load_dotenv
 from schemas import QuantReport
 from ingestor import fetch_financial_metrics
 
-# Load environment variables from .env
 load_dotenv()
 
-# Initialize Gemini Client using the GEMINI_API_KEY from .env
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+# Access API key from env vars locally or Streamlit secrets on cloud
+api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+client = genai.Client(api_key=api_key)
 
 QUANT_SYSTEM_PROMPT = """
 You are an institutional growth equity analyst focusing strictly on maximum-return US equities. 

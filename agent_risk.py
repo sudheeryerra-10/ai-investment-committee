@@ -2,6 +2,7 @@ import os
 import json
 import urllib.request
 import xml.etree.ElementTree as ET
+import streamlit as st
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
@@ -9,11 +10,10 @@ from dotenv import load_dotenv
 from schemas import QuantReport, RiskReport
 from agent_quant import run_quant_agent
 
-# Load environment variables
 load_dotenv()
 
-# Initialize Gemini Client
-client = genai.Client(api_key=os.getenv("AQ.Ab8RN6IXgBuWZhoW4nJcy2YQMThiWFdIl6HnsorCB-xUwq4YlA"))
+api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+client = genai.Client(api_key=api_key)
 
 def fetch_ticker_news_rss(ticker_symbol: str, max_items: int = 5) -> str:
     """
