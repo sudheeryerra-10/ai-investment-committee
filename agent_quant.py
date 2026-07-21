@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import streamlit as st
 from google import genai
 from google.genai import types
@@ -9,21 +10,33 @@ from schemas import QuantReport
 
 load_dotenv()
 
-# Safe API key lookup for local & Streamlit Cloud
+# Safe API key lookup for local dev & Streamlit Cloud Secrets
 api_key = os.getenv("AQ.Ab8RN6LucwU076eFsdgbY65KniyOBG9Y9qQJx8phFdCoO5wbmg") or st.secrets.get("AQ.Ab8RN6LucwU076eFsdgbY65KniyOBG9Y9qQJx8phFdCoO5wbmg")
 client = genai.Client(api_key=api_key)
 
 QUANT_SYSTEM_PROMPT = """
 You are Agent A: Institutional Lead Quantitative Fundamental Analyst.
-Your task is to analyze the given US stock ticker using real-time financial search.
+Analyze the target US stock ticker using real-time search grounding.
 
-You must search for and evaluate:
+Search for and evaluate:
 1. Trailing 12-Month (TTM) Revenue Growth (%) & Profit Margin (%)
 2. Rule of 40 Score (Revenue Growth % + Profit Margin %)
 3. Free Cash Flow (FCF) Yield (%)
 4. Trailing P/E and P/S Ratios
 
-Produce a structured QuantReport adhering strictly to the required output schema.
+CRITICAL OUTPUT REQUIREMENT:
+You MUST return ONLY a raw JSON object adhering strictly to this format (no markdown fences, no extra text):
+{
+    "ticker": "TICKER",
+    "valuation_verdict": "UNDERVALUED" | "FAIRLY_VALUED" | "OVERVALUED",
+    "rule_of_40_score": 45.2,
+    "fcf_yield_pct": 3.1,
+    "pe_ratio": "32.5",
+    "ps_ratio": "10.2",
+    "key_positives": ["Point 1", "Point 2"],
+    "key_risks": ["Risk 1", "Risk 2"],
+    "quantitative_summary": "Detailed institutional analysis text..."
+}
 """
 
 def run_quant_agent(ticker_symbol: str) -> QuantReport:
@@ -35,23 +48,25 @@ def run_quant_agent(ticker_symbol: str) -> QuantReport:
     user_prompt = f"""
     Target Ticker: {ticker_symbol.upper()}
     
-    Search for live financial data for {ticker_symbol.upper()}:
-    - Find current Revenue Growth (TTM), Net Profit Margin, Free Cash Flow, Market Cap, P/E ratio, and P/S ratio.
-    - Calculate the Rule of 40 score and FCF yield.
-    - Analyze operational quality and valuation discipline.
+    Search for live financial metrics for {ticker_symbol.upper()} and output the results as a raw JSON object.
     """
     
+    # Notice: response_mime_type and response_schema are omitted to allow Google Search Grounding
     response = client.models.generate_content(
         model='gemini-2.5-flash',
         contents=user_prompt,
         config=types.GenerateContentConfig(
             system_instruction=QUANT_SYSTEM_PROMPT,
-            tools=[{"google_search": {}}],  # Enables live search grounding
-            response_mime_type="application/json",
-            response_schema=QuantReport,
-            temperature=0.2,
+            tools=[{"google_search": {}}],  # Live web grounding enabled
+            temperature=0.1,
         ),
     )
     
-    report_dict = json.loads(response.text)
+    # Extract JSON cleanly from response text
+    raw_text = response.text.strip()
+    # Strip markdown block formatting if present
+    if "```" in raw_text:
+        raw_text = re.sub(r"^```(?:json)?\n|\n```$", "", raw_text, flags=re.MULTILINE).strip()
+        
+    report_dict = json.loads(raw_text)
     return QuantReport(**report_dict)
